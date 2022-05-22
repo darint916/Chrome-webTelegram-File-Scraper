@@ -1,0 +1,8 @@
+{
+    "DRIVER_PATH": "ABSOLUTE DRIVER PATH",
+    "telegram_page_link": "https://web.telegram.org/z/",
+    "phone_number": "PHONE NUMBER",
+    "group_option": 2, 
+    "last_msg_id": 0,
+    "script_refresh_time": 5
+}
