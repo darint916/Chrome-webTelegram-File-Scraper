@@ -1,47 +1,109 @@
 from selenium import webdriver
+from selenium.webdriver.remote.webelement import WebElement
+from selenium.webdriver.common.by import By
+import json
+import threading
 #from selenium.webdriver.chrome.options import Options
-from bs4 import BeautifulSoup
+#from bs4 import BeautifulSoup
 import time
 import requests
-page = requests.get("https://web.telegram.org/z/#-1725878819")
-
-soup = BeautifulSoup(page.content, 'html.parser')
+page = requests.get("https://web.telegram.org/z/")
 #For headless no gui
 options = webdriver.ChromeOptions()
 #options.headless = True
 #options.add_argument("--window-size=")
 options.add_experimental_option("detach", True)
 
-#Personal info
-DRIVER_PATH = 'PATH_TO_DRIVER'
-telegram_page_link = 'LINK'
-phone_number = "PHONE NUMBER"
+f = open('config-data.json')
+data = json.load(f)
 
-
-driver = webdriver.Chrome(chrome_options=options, executable_path=DRIVER_PATH)
-driver.get(telegram_page_link)
-
-time.sleep(6)
-login_click = driver.find_element_by_css_selector('#auth-qr-form > div > button')
+driver = webdriver.Chrome(chrome_options=options, executable_path=data['DRIVER_PATH'])
+driver.get(data['telegram_page_link'])
+driver.execute_script("document.body.style.zoom='100%'")
+time.sleep(7)
+login_click = driver.find_element(By.CSS_SELECTOR, value='#auth-qr-form > div > button')
 login_click.click()
-time.sleep(1)
-input_phone_num = driver.find_element_by_css_selector('#sign-in-phone-number')
-input_phone_num.send_keys(phone_number)
+
+time.sleep(2)
+driver.find_element(By.CSS_SELECTOR, value='#sign-in-phone-number').send_keys(data['phone_number'])
+
 #driver.find_element_by_css_selector('#sign-in-keep-session').click()
-time.sleep(3)
-next_button = driver.find_element_by_css_selector('#auth-phone-number-form > div > form > button:nth-child(4)').click()
-time.sleep(5)
+time.sleep(3.5)
+driver.find_element(By.CSS_SELECTOR, value='#auth-phone-number-form > div > form > button:nth-child(4)').click()
+time.sleep(3.5)
 phone_code = input("Enter in phone number val: ")
-driver.find_element_by_css_selector('#sign-in-code').send_keys(phone_code)
-time.sleep(3)
 try:
-    driver.navigate().to(telegram_page_link)
+    driver.find_element(By.CSS_SELECTOR, value='#sign-in-code').send_keys(phone_code)
 except:
+    pass
+time.sleep(3.5)
+driver.find_elements(By.CLASS_NAME, value="ListItem")[data['group_option'] - 1].click()
+
+def debug_wait_timer():
+    wait_input = input("Press M for data modification, R for timer/refresh time, P for pause timer")
+    if(wait_input == "M"):
+        mod_input == input("Enter in selection: 0 -group_page option, 1 -last_msg_id, ")
+        if(mod_input == "0"):
+            data['group_option'] = int(input("Enter in new group_option: "))
+            driver.find_elements(By.CLASS_NAME, value="ListItem")[data['group_option'] - 1].click()
+        elif(mod_input == "1"):
+            data['last_msg_id'] = int(input("Enter in new last_msg_id: "))
+    elif(wait_input == "R"):
+        data['script_refresh_time'] = int(input("Enter in new wait/refresh time: "))
+    elif(wait_input == "P"):
+        pass
+wait_timer = threading.Timer(data['script_refresh_time'], debug_wait_timer)
+def get_file_size(msg: WebElement):
     try:
-        driver.find_element_by_css_selector('#LeftColumn-main > div.Transition.zoom-fade > div > div > div > div > div > div > div.ListItem.Chat.chat-item-clickable.group.selected.no-selection.has-ripple').click()
+        size: WebElement = msg.find_element(By.CLASS_NAME, value="file-subtitle")
     except:
-        print("Error click")
-        driver.find_element_by_css_selector("#LeftColumn-main > div.Transition.zoom-fade > div > div > div > div > div > div > div.ListItem.Chat.chat-item-clickable.group.selected.no-selection.has-ripple > div > div.ripple-container").click()
+        print("No size")
+        return None
+    file_size, unit = size.text.split(" ")
+    file_size = float(file_size)
+    if unit == "MB":
+        return file_size * 1024
+    elif unit == "KB":
+        return file_size
+
+def get_file_title(msg: WebElement):
+    try:
+        title: WebElement = msg.find_element(By.CLASS_NAME, value="file-title")
+        return title.text
+    except:
+        print("No title")
+        return None
     
-    print("failed")
-time.sleep(10)
+msg_sequence = {}
+while True:
+    msgs = driver.find_elements(By.CLASS_NAME, value="Message")
+    time.sleep(data['script_refresh_time'])
+    for msg in msgs:
+        try: 
+            msg_id = int(msg.get_attribute("data-message-id"))
+        except:
+            continue
+        print(f"msg_id found: {msg_id}")
+        if msg_id > data['last_msg_id']:
+            msg_sequence.update({msg_id: msg})
+            print(f"Queued msg: {msg_id}")
+    if(not list(msg_sequence.keys())):
+        continue
+    data['last_msg_id'] = max(msg_sequence.keys())
+    item: WebElement = None
+    for key, item in msg_sequence.items():
+        print(f"Attempting download of id {key}")
+        if(name := get_file_title(item)):
+            if(size := get_file_size(item)):
+                print(f"Attempting download of {name} id: {key} - size:{size}")
+                try:
+                    dl = item.find_element(By.CLASS_NAME, value="icon-download")
+                    dl.click()
+                    print(f"Download success, in progress{name} key: {key} - size:{size}")
+                    time.sleep(2)
+                except Exception as err:
+                    print(f"Unable to find download button for id: {key}")
+    msg_sequence.clear()
+    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+    print("sequence end")
+
