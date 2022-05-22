@@ -17,13 +17,15 @@ options.add_experimental_option("detach", True)
 f = open('config-data.json')
 data = json.load(f)
 
+"""
+Initial telegram login sequence
+"""
 driver = webdriver.Chrome(chrome_options=options, executable_path=data['DRIVER_PATH'])
 driver.get(data['telegram_page_link'])
 driver.execute_script("document.body.style.zoom='100%'")
 time.sleep(7)
 login_click = driver.find_element(By.CSS_SELECTOR, value='#auth-qr-form > div > button')
 login_click.click()
-
 time.sleep(2)
 driver.find_element(By.CSS_SELECTOR, value='#sign-in-phone-number').send_keys(data['phone_number'])
 
@@ -39,21 +41,7 @@ except:
 time.sleep(3.5)
 driver.find_elements(By.CLASS_NAME, value="ListItem")[data['group_option'] - 1].click()
 
-def debug_wait_timer():
-    wait_input = input("Press M for data modification, R for timer/refresh time, P for pause timer")
-    if(wait_input == "M"):
-        mod_input == input("Enter in selection: 0 -group_page option, 1 -last_msg_id, ")
-        if(mod_input == "0"):
-            data['group_option'] = int(input("Enter in new group_option: "))
-            driver.find_elements(By.CLASS_NAME, value="ListItem")[data['group_option'] - 1].click()
-        elif(mod_input == "1"):
-            data['last_msg_id'] = int(input("Enter in new last_msg_id: "))
-    elif(wait_input == "R"):
-        data['script_refresh_time'] = int(input("Enter in new wait/refresh time: "))
-    elif(wait_input == "P"):
-        pass
-wait_timer = threading.Timer(data['script_refresh_time'], debug_wait_timer)
-def get_file_size(msg: WebElement):
+def get_file_size(msg: WebElement): 
     try:
         size: WebElement = msg.find_element(By.CLASS_NAME, value="file-subtitle")
     except:
@@ -73,22 +61,24 @@ def get_file_title(msg: WebElement):
     except:
         print("No title")
         return None
-    
+
+"""Scrapes images queued from telegram group"""
 msg_sequence = {}
-while True:
-    msgs = driver.find_elements(By.CLASS_NAME, value="Message")
+def scrape_images():
     time.sleep(data['script_refresh_time'])
+    msgs = driver.find_elements(By.CLASS_NAME, value="Message")
     for msg in msgs:
         try: 
             msg_id = int(msg.get_attribute("data-message-id"))
         except:
             continue
-        print(f"msg_id found: {msg_id}")
+        #print(f"msg_id found: {msg_id}")
         if msg_id > data['last_msg_id']:
             msg_sequence.update({msg_id: msg})
             print(f"Queued msg: {msg_id}")
+    print(f"last msg found: {msg_id}")
     if(not list(msg_sequence.keys())):
-        continue
+        return
     data['last_msg_id'] = max(msg_sequence.keys())
     item: WebElement = None
     for key, item in msg_sequence.items():
@@ -107,3 +97,41 @@ while True:
     driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
     print("sequence end")
 
+def scroll_down_check():
+    try:
+        scroll_button = driver.find_element(By.CSS_SELECTOR, value ="#MiddleColumn > div.messages-layout > div.src-components-middle-FloatingActionButtons-module__root.src-components-middle-FloatingActionButtons-module__revealed.src-components-middle-FloatingActionButtons-module__no-composer.src-components-middle-FloatingActionButtons-module__no-extra-shift > div > button")
+        scroll_button.click()
+        print("scroll found")
+    except:
+        pass
+
+"""Config wait selections"""
+def debug_wait_timer():
+    wait_input = input("Press M for data modification, R for timer/refresh time, any key to exit: ")
+    if(wait_input == "M"):
+        global mod_input
+        mod_input == input("Enter in selection: 0 -group_page option, 1 -last_msg_id, ")
+        if(mod_input == "0"):
+            data['group_option'] = int(input("Enter in new group_option: "))
+            driver.find_elements(By.CLASS_NAME, value="ListItem")[data['group_option'] - 1].click()
+        elif(mod_input == "1"):
+            data['last_msg_id'] = int(input("Enter in new last_msg_id: "))
+    elif(wait_input == "R"):
+        data['script_refresh_time'] = int(input("Enter in new wait/refresh time: "))
+    exit()
+
+downtime_thread = threading.Thread(target=debug_wait_timer)
+while True:
+    try:
+        print("Scraping images")
+        scrape_images()
+        downtime_thread.start()
+        downtime_thread.join(data['script_refresh_time'])
+    except RuntimeError as e: #if thread is called twice (when there is no input within script refresh time)
+        print(e)
+        print("Config still running, continuing script")
+        print("Press M for data modification, R for timer/refresh time")
+        scroll_down_check()
+        print("Scraping images")
+        scrape_images()
+    
