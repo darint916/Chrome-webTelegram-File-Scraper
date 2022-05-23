@@ -62,40 +62,68 @@ def get_file_title(msg: WebElement):
         print("No title")
         return None
 
-"""Scrapes images queued from telegram group"""
+def remind_msg():
+    print("\nConfig Reminder:\nR = RefreshTime")
+    print("M = Data Mod: 0 for group_page, 1 for last_msg")
+
+global msg_sequence
 msg_sequence = {}
+global wait_flag
+wait_flag = False
+global data_report
+data_report = {"success": 0, "ignored": 0, "failed": 0}
+remind_count = 0
+
+"""Scrapes images queued from telegram group"""
 def scrape_images():
-    time.sleep(data['script_refresh_time'])
-    msgs = driver.find_elements(By.CLASS_NAME, value="Message")
-    for msg in msgs:
-        try: 
-            msg_id = int(msg.get_attribute("data-message-id"))
-        except:
+    while True:
+        global remind_count
+        if remind_count > 3:
+            remind_msg()
+            remind_count = 0
+        time.sleep(data['script_refresh_time'])
+        msgs = driver.find_elements(By.CLASS_NAME, value="Message")
+        for msg in msgs:
+            try: 
+                msg_id = int(msg.get_attribute("data-message-id"))
+            except:
+                continue
+            #print(f"msg_id found: {msg_id}")
+            if msg_id > data['last_msg_id']:
+                msg_sequence.update({msg_id: msg})
+                print(f"Queued msg: {msg_id}")
+        print(f"Last msg found: {msg_id}")
+        if(not list(msg_sequence.keys())):
+            remind_count += 1
+            print("No new messages")
             continue
-        #print(f"msg_id found: {msg_id}")
-        if msg_id > data['last_msg_id']:
-            msg_sequence.update({msg_id: msg})
-            print(f"Queued msg: {msg_id}")
-    print(f"last msg found: {msg_id}")
-    if(not list(msg_sequence.keys())):
-        return
-    data['last_msg_id'] = max(msg_sequence.keys())
-    item: WebElement = None
-    for key, item in msg_sequence.items():
-        print(f"Attempting download of id {key}")
-        if(name := get_file_title(item)):
-            if(size := get_file_size(item)):
-                print(f"Attempting download of {name} id: {key} - size:{size}")
-                try:
-                    dl = item.find_element(By.CLASS_NAME, value="icon-download")
-                    dl.click()
-                    print(f"Download success, in progress{name} key: {key} - size:{size}")
-                    time.sleep(2)
-                except Exception as err:
-                    print(f"Unable to find download button for id: {key}")
-    msg_sequence.clear()
-    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-    print("sequence end")
+        data['last_msg_id'] = max(msg_sequence.keys())
+        item: WebElement = None
+        wait_flag = True
+        for key, item in msg_sequence.items():
+            print(f"Attempting download of id {key}")
+            if(name := get_file_title(item)):
+                if(size := get_file_size(item)):
+                    #print(f"Attempting download of {name} id: {key} - size:{size}")
+                    try:
+                        dl = item.find_element(By.CLASS_NAME, value="icon-download")
+                        dl.click()
+                        print(f"Download success, in progress{name} key: {key} - size:{size}")
+                        data_report['success'] += 1
+                        time.sleep(2)
+                    except Exception as err:
+                        try:
+                            item.find_element(By.CLASS_NAME, value="icon-eye")
+                            print(f"small file, skipping download. id: {key} - size:{size}")
+                            data_report['ignored'] += 1
+                        except:
+                            print(f"Unable to find download button for id: {key}")
+                            data_report['failed'] += 1
+        wait_flag = False
+        msg_sequence.clear()
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        remind_msg()
+        print(f"\nSequence end- Summary - Successes: {data_report['success']}, Ignored: {data_report['ignored']}, Failed: {data_report['failed']}\n\n")
 
 def scroll_down_check():
     try:
@@ -107,31 +135,29 @@ def scroll_down_check():
 
 """Config wait selections"""
 def debug_wait_timer():
-    wait_input = input("Press M for data modification, R for timer/refresh time, any key to exit: ")
-    if(wait_input == "M"):
-        global mod_input
-        mod_input == input("Enter in selection: 0 -group_page option, 1 -last_msg_id, ")
-        if(mod_input == "0"):
-            data['group_option'] = int(input("Enter in new group_option: "))
-            driver.find_elements(By.CLASS_NAME, value="ListItem")[data['group_option'] - 1].click()
-        elif(mod_input == "1"):
-            data['last_msg_id'] = int(input("Enter in new last_msg_id: "))
-    elif(wait_input == "R"):
-        data['script_refresh_time'] = int(input("Enter in new wait/refresh time: "))
-    exit()
+    while not wait_flag:
+        try:
+            wait_input = input("Press M for data modification, R for timer/refresh time\n")
+            wait_input.upper()
+            if(wait_input == "M"):
+                mod_input = input("Enter in selection: 0 -group_page option, 1 -last_msg_id\n")
+                if(mod_input == "0"):
+                    data['group_option'] = int(input("Enter in new group_option:\n"))
+                    driver.find_elements(By.CLASS_NAME, value="ListItem")[data['group_option'] - 1].click()
+                elif(mod_input == "1"):
+                    data['last_msg_id'] = int(input("Enter in new last_msg_id:\n"))
+                    print("Update Success, please wait for next refresh")
+            elif(wait_input == "R"):
+                data['script_refresh_time'] = int(input("Enter in new wait/refresh time:\n"))
+        except:
+            print("Invalid input, restarting config")
+            continue
+    time.sleep(2)
+    debug_wait_timer()
 
-downtime_thread = threading.Thread(target=debug_wait_timer)
-while True:
-    try:
-        print("Scraping images")
-        scrape_images()
-        downtime_thread.start()
-        downtime_thread.join(data['script_refresh_time'])
-    except RuntimeError as e: #if thread is called twice (when there is no input within script refresh time)
-        print(e)
-        print("Config still running, continuing script")
-        print("Press M for data modification, R for timer/refresh time")
-        scroll_down_check()
-        print("Scraping images")
-        scrape_images()
-    
+print("Begin thread and scrape")
+time.sleep(1)
+downtime_timer = threading.Thread(target=debug_wait_timer)
+downtime_timer.start()
+scrape_images()
+
