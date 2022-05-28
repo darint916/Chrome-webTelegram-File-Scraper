@@ -1,10 +1,10 @@
 # Chrome webTelegram File Scraper
-##Selenium automated scraper for telegram files
+## Selenium automated scraper for telegram files
 Only need chrome driver with the same version then change config-data.json and replace with personal information
 **Login sequence assumes using telephone number wiht no 2fa**
 
-##Notices
-###Configuration keys while running
+## Notices
+### Configuration keys while running
 M - Modify Data
 -0 - group_page/which dm on left
 -1 - change most recent message number
