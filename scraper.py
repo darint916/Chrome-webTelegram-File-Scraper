@@ -3,24 +3,28 @@ from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.common.by import By
 import json
 import threading
-#from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 #from bs4 import BeautifulSoup
 import time
 import requests
 page = requests.get("https://web.telegram.org/z/")
 #For headless no gui
-options = webdriver.ChromeOptions()
+options = Options()
+options.add_argument("start-maximized")
 #options.headless = True
 #options.add_argument("--window-size=")
 options.add_experimental_option("detach", True)
 
-f = open('config-data.json')
+f = open('personal.json')
 data = json.load(f)
 
+s = Service(data['DRIVER_PATH'])
 """
 Initial telegram login sequence
 """
-driver = webdriver.Chrome(chrome_options=options, executable_path=data['DRIVER_PATH'])
+driver = webdriver.Chrome(service=s, options=options)
 driver.get(data['telegram_page_link'])
 driver.execute_script("document.body.style.zoom='100%'")
 time.sleep(7)
