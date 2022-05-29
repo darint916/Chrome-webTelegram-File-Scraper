@@ -9,39 +9,48 @@ from webdriver_manager.chrome import ChromeDriverManager
 #from bs4 import BeautifulSoup
 import time
 import requests
-page = requests.get("https://web.telegram.org/z/")
-#For headless no gui
+from LocalStorage import LocalStorage 
+#data from config
+f = open('config-data.json')
+data = json.load(f)
 options = Options()
 options.add_argument("start-maximized")
-#options.headless = True
-#options.add_argument("--window-size=")
 options.add_experimental_option("detach", True)
+options.add_experimental_option("prefs", data["prefs"])
 
-f = open('personal.json')
-data = json.load(f)
-
-s = Service(data['DRIVER_PATH'])
 """
 Initial telegram login sequence
 """
+s = Service(data['DRIVER_PATH'])
 driver = webdriver.Chrome(service=s, options=options)
 driver.get(data['telegram_page_link'])
-driver.execute_script("document.body.style.zoom='100%'")
 time.sleep(7)
-login_click = driver.find_element(By.CSS_SELECTOR, value='#auth-qr-form > div > button')
-login_click.click()
-time.sleep(2)
-driver.find_element(By.CSS_SELECTOR, value='#sign-in-phone-number').send_keys(data['phone_number'])
+'''
+def token_login():
+    local_storage = LocalStorage(driver)
+    local_storage.clear()
+    local_storage.set_auth(data['dc2_auth_key'], data['user_auth'])
+    time.sleep(5)
+    driver.get(data['telegram_page_link'])
+token_login()
+'''
+def phone_login():
 
-#driver.find_element_by_css_selector('#sign-in-keep-session').click()
-time.sleep(3.5)
-driver.find_element(By.CSS_SELECTOR, value='#auth-phone-number-form > div > form > button:nth-child(4)').click()
-time.sleep(3.5)
-phone_code = input("Enter in phone number val: ")
-try:
-    driver.find_element(By.CSS_SELECTOR, value='#sign-in-code').send_keys(phone_code)
-except:
-    pass
+    login_click = driver.find_element(By.CSS_SELECTOR, value='#auth-qr-form > div > button')
+    login_click.click()
+    time.sleep(2)
+    driver.find_element(By.CSS_SELECTOR, value='#sign-in-phone-number').send_keys(data['phone_number'])
+
+    #driver.find_element_by_css_selector('#sign-in-keep-session').click()
+    time.sleep(3.5)
+    driver.find_element(By.CSS_SELECTOR, value='#auth-phone-number-form > div > form > button:nth-child(4)').click()
+    time.sleep(3.5)
+    phone_code = input("Enter in phone number val: ")
+    try:
+        driver.find_element(By.CSS_SELECTOR, value='#sign-in-code').send_keys(phone_code)
+    except:
+        pass
+phone_login()
 time.sleep(3.5)
 driver.find_elements(By.CLASS_NAME, value="ListItem")[data['group_option'] - 1].click()
 
@@ -112,9 +121,10 @@ def scrape_images():
                     try:
                         dl = item.find_element(By.CLASS_NAME, value="icon-download")
                         dl.click()
-                        print(f"Download success, in progress{name} key: {key} - size:{size}")
+                        print(f"Download success, in progress: {name} key: {key} - size:{size}")
                         data_report['success'] += 1
-                        time.sleep(2)
+                        time.sleep(6)
+                        scroll_down_check()
                     except Exception as err:
                         try:
                             item.find_element(By.CLASS_NAME, value="icon-eye")
@@ -125,7 +135,10 @@ def scrape_images():
                             data_report['failed'] += 1
         wait_flag = False
         msg_sequence.clear()
-        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        if(data_report['success']):
+            time.sleep(7)
+            print("Waiting for downloads to complete")
+        scroll_down_check()
         remind_msg()
         print(f"\nSequence end- Summary - Successes: {data_report['success']}, Ignored: {data_report['ignored']}, Failed: {data_report['failed']}\n\n")
 
@@ -158,6 +171,15 @@ def debug_wait_timer():
             continue
     time.sleep(2)
     debug_wait_timer()
+'''
+if(data['login_type'] == "token"):
+    token_login()
+elif(data['login_type'] == "phone"):
+    phone_login()
+else:
+    print("Invalid login type")
+    exit()
+'''
 
 print("Begin thread and scrape")
 time.sleep(1)
